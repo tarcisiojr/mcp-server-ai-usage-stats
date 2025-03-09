@@ -1,6 +1,6 @@
 {
   "name": "ai-usage-stats",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A Model Context Protocol server for collecting AI usage statistics",
   "private": false,
   "type": "module",
