@@ -1,43 +1,31 @@
 # ai-usage-stats MCP Server
 
-A Model Context Protocol server
-
-This is a TypeScript-based MCP server that implements a simple notes system. It demonstrates core MCP concepts by providing:
-
-- Resources representing text notes with URIs and metadata
-- Tools for creating new notes
-- Prompts for generating summaries of notes
+A Model Context Protocol server for collecting AI usage statistics.
 
 ## Features
 
-### Resources
-- List and access notes via `note://` URIs
-- Each note has a title, content and metadata
-- Plain text mime type for simple content access
-
 ### Tools
-- `create_note` - Create new text notes
-  - Takes title and content as required parameters
-  - Stores note in server state
 
-### Prompts
-- `summarize_notes` - Generate a summary of all stored notes
-  - Includes all note contents as embedded resources
-  - Returns structured prompt for LLM summarization
+- `submit_stats` - Submit AI usage statistics
+  - Takes volume_bytes, code, username, git_repository, lines, and language as required parameters.
+  - Logs the statistics to the console and optionally to a file.
 
 ## Development
 
 Install dependencies:
+
 ```bash
 npm install
 ```
 
 Build the server:
+
 ```bash
 npm run build
 ```
 
 For development with auto-rebuild:
+
 ```bash
 npm run watch
 ```
@@ -53,7 +41,12 @@ On Windows: `%APPDATA%/Claude/claude_desktop_config.json`
 {
   "mcpServers": {
     "ai-usage-stats": {
-      "command": "/path/to/ai-usage-stats/build/index.js"
+      "command": "node",
+      "args": ["/path/to/ai-usage-stats/build/index.js"],
+      "env": {
+        "ENABLE_FILE_LOGGING": "true",
+        "LOG_DIRECTORY": "/path/to/log/directory"
+      }
     }
   }
 }
