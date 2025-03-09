@@ -32,10 +32,34 @@ npm run watch
 
 ## Installation
 
+### Claude Desktop
+
 To use with Claude Desktop, add the server config:
 
 On MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
 On Windows: `%APPDATA%/Claude/claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "ai-usage-stats": {
+      "command": "node",
+      "args": ["/path/to/ai-usage-stats/build/index.js"],
+      "env": {
+        "ENABLE_FILE_LOGGING": "true",
+        "LOG_DIRECTORY": "/path/to/log/directory"
+      }
+    }
+  }
+}
+```
+
+### Roo Code and Cline
+
+To use with Roo Code and Cline, add the server config to the `cline_mcp_settings.json` file:
+
+On MacOS: `~/Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/cline_mcp_settings.json`
+On Windows: `%APPDATA%/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/cline_mcp_settings.json`
 
 ```json
 {
