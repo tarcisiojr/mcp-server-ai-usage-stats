@@ -4,6 +4,13 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { CallToolRequestSchema, ListToolsRequestSchema, } from "@modelcontextprotocol/sdk/types.js";
 import fs from "fs";
 import os from "os";
+import fetch from 'node-fetch';
+const STATS_SERVER_URL = process.env.STATS_SERVER_URL || null;
+const enableFileLogging = process.env.ENABLE_FILE_LOGGING === "true";
+const USERNAME = process.env.USERNAME || "unknown";
+const logDirectory = process.env.LOG_DIRECTORY || os.tmpdir();
+const logFilePath = `${logDirectory}/ai-usage-stats.log`;
+console.log("enableFileLogging:", enableFileLogging);
 const server = new Server({
     name: "ai-usage-stats",
     version: "0.1.0",
@@ -12,10 +19,65 @@ const server = new Server({
         tools: {},
     },
 });
-const enableFileLogging = process.env.ENABLE_FILE_LOGGING === "true";
-console.log("enableFileLogging:", enableFileLogging);
-const logDirectory = process.env.LOG_DIRECTORY || os.tmpdir();
-const logFilePath = `${logDirectory}/ai-usage-stats.log`;
+console.log("Iniciando plugin de estatísticas");
+async function getGitRepositoryUrl(workspaceDir) {
+    const gitConfigPath = `${workspaceDir}/.git/config`;
+    if (!fs.existsSync(gitConfigPath)) {
+        console.log(`[Git] Arquivo de configuração Git não encontrado em: ${workspaceDir}`);
+        return null;
+    }
+    try {
+        const configContent = fs.readFileSync(gitConfigPath, 'utf-8');
+        const originRegex = /\[remote "origin"\]\s+url = (.*)/;
+        const match = configContent.match(originRegex);
+        if (match && match[1]) {
+            return match[1].trim();
+        }
+        else {
+            console.log(`[Git] Seção 'origin' não encontrada no arquivo de configuração Git.`);
+            return null;
+        }
+    }
+    catch (error) {
+        console.error(`[Git] Erro ao ler o arquivo de configuração Git: ${error}`);
+        return null;
+    }
+}
+async function logToFile(logFilePath, logMessage) {
+    fs.appendFile(logFilePath, logMessage, (err) => {
+        if (err) {
+            console.error("Error writing to log file:", err);
+        }
+        else {
+            console.log("Log file updated successfully!");
+        }
+    });
+}
+async function sendStats(stats) {
+    if (!STATS_SERVER_URL) {
+        console.log("[Stats] STATS_SERVER_URL is not defined, skipping sending stats");
+        // logToFile(logFilePath, "ERRO env nao definida");
+        return;
+    }
+    try {
+        const response = await fetch(STATS_SERVER_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(stats),
+        });
+        if (!response.ok) {
+            // logToFile(logFilePath, "ERRO chamar server");
+            console.error(`[Stats] Failed to send stats to ${STATS_SERVER_URL}, status: ${response.status}`);
+            return;
+        }
+        console.log("[Stats] Stats sent successfully");
+    }
+    catch (error) {
+        console.error(`[Stats] Error sending stats: ${error}`);
+    }
+}
 server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
         tools: [
@@ -33,13 +95,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                             type: "string",
                             description: "Text of the code generated/altered",
                         },
-                        username: {
+                        workspace_dir: {
                             type: "string",
-                            description: "Name of the developer using the AI assistant",
-                        },
-                        git_repository: {
-                            type: "string",
-                            description: "Name of the git remote repository 'origin'",
+                            description: "nome do diretório do projeto",
                         },
                         lines: {
                             type: "number",
@@ -50,7 +108,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                             description: "Language used for generation",
                         },
                     },
-                    required: ["volume_bytes", "lines", "language", "code", "username", "git_repository"],
+                    required: ["volume_bytes", "lines", "language", "code", "workspace_dir"],
                 },
             },
         ],
@@ -62,26 +120,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         case "submit_stats": {
             const volume_bytes = Number(request.params.arguments?.volume_bytes);
             const code = String(request.params.arguments?.code);
-            const username = String(request.params.arguments?.username);
-            const git_repository = String(request.params.arguments?.git_repository);
+            const username = USERNAME;
+            const workspace_dir = String(request.params.arguments?.workspace_dir);
             const lines = Number(request.params.arguments?.lines);
             const language = String(request.params.arguments?.language).toLowerCase();
-            if (!volume_bytes || volume_bytes <= 0 || !lines || lines <= 0 || !language || !code || !username || !git_repository) {
-                throw new Error("Volume and lines must be positive values, and volume, lines, language, code, username and git_repository are required");
+            if (!volume_bytes || volume_bytes <= 0 || !lines || lines <= 0 || !language || !code || !username || !workspace_dir) {
+                throw new Error("Volume and lines must be positive values, and volume, lines, language, code, username, workspace_dir are required");
             }
             const timestamp = new Date().toISOString();
-            const logMessage = `[${timestamp}] [Stats] Volume: ${volume_bytes} bytes, Lines: ${lines}, Language: ${language}, Username: ${username}, Code: ${code}, Git Repository: ${git_repository}\n`;
+            const gitRepository = await getGitRepositoryUrl(workspace_dir);
+            const logMessage = `[${timestamp}] [Stats] Volume: ${volume_bytes} bytes, Lines: ${lines}, Language: ${language}, Username: ${username}, Code: ${code}, Git Repository: ${gitRepository}, Workspace Dir: ${workspace_dir}\n`;
             console.log(logMessage);
             if (enableFileLogging) {
-                fs.appendFile(logFilePath, logMessage, (err) => {
-                    if (err) {
-                        console.error("Error writing to log file:", err);
-                    }
-                    else {
-                        console.log("Log file updated successfully!");
-                    }
-                });
+                logToFile(logFilePath, logMessage);
             }
+            sendStats({
+                username,
+                lines,
+                repository: gitRepository,
+                volume_bytes,
+                language
+            });
             const result = {
                 content: [
                     {
